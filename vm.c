@@ -47,48 +47,48 @@ struct ptable {
 
 struct ptable * createPTable(int size)
 {
-struct ptable * p=(struct ptable*) malloc(sizeof(struct ptable));
-p->entry = (struct ptable_entry *)malloc(sizeof(struct ptable_entry)*size);
-for (int i=0; i<size; i++) {
-   p->entry[i].valid=0;
-}
-p->size=size;
-p->freeframe=0;
-return p;
+   struct ptable * p=(struct ptable*) malloc(sizeof(struct ptable));
+   p->entry = (struct ptable_entry *)malloc(sizeof(struct ptable_entry)*size);
+   for (int i=0; i<size; i++) {
+      p->entry[i].valid=0;
+   }
+   p->size=size;
+   p->freeframe=0;
+   return p;
 }
 
 void destroyPTable(struct ptable *p)
 {
-free(p->entry);
-free(p);
-return;
+   free(p->entry);
+   free(p);
+   return;
 }
 
 int accessPTable(struct ptable *p, int page)
 {
-if (p->entry[page].valid == 0) { /* No page fault */
-    p->entry[page].frame = p->freeframe++;
-    p->entry[page].valid = 1;
-}
-return p->entry[page].frame;
+   if (p->entry[page].valid == 0) { /* No page fault */
+      p->entry[page].frame = p->freeframe++;
+      p->entry[page].valid = 1;
+   }
+   return p->entry[page].frame;
 }
 
 struct tlb * createTLB(int size)
 {
-struct tlb * t=(struct tlb*) malloc(sizeof(struct tlb));
-t->entry = (struct tlb_entry *)malloc(sizeof(struct tlb_entry)*size);
-for (int i=0; i<size; i++) {
-   t->entry[i].valid=0;
-}
-t->size=size;
-return t;
+   struct tlb * t=(struct tlb*) malloc(sizeof(struct tlb));
+   t->entry = (struct tlb_entry *)malloc(sizeof(struct tlb_entry)*size);
+   for (int i=0; i<size; i++) {
+      t->entry[i].valid=0;
+   }
+   t->size=size;
+   return t;
 }
 
 void destroyTLB(struct tlb *t)
 {
-free(t->entry);
-free(t);
-return;
+   free(t->entry);
+   free(t);
+   return;
 }
 
 /* 
@@ -97,18 +97,42 @@ return;
  */
 int accessTLB(struct tlb *t, int page, int time)
 {
-for (int i=0; i<t->size; i++) {
-    if (t->entry[i].valid==1 && t->entry[i].page==page) {
-	    t->entry[i].age=time;
-	    return(t->entry[i].frame);
-    }
-}
-return FAIL;
+   for (int i=0; i<t->size; i++) {
+      if (t->entry[i].valid==1 && t->entry[i].page==page) {
+         t->entry[i].age=time;
+         return(t->entry[i].frame);
+      }
+   }
+   return FAIL;
 }	
 
 void replaceTLB(struct tlb *t, int page, int frame, int time)
 {
-return;
+   int tlbcount = 0;
+   int i;
+
+   for(i = 0; i < TLBSIZE; i++) {
+      if(t->entry[i].valid) {
+         tlbcount++;
+      }
+   }
+
+   if(tlbcount < TLBSIZE) {
+      i = tlbcount;
+   } else {
+      int minTime = t->entry[0].age;
+      for(int j = 1; j < TLBSIZE; j++) {
+         if(t->entry[j].age < minTime) {
+            minTime = t->entry[j].age;
+            i = j;
+         }
+      }
+   }
+
+   t->entry[i].valid = 1;
+   t->entry[i].page = page;
+   t->entry[i].frame = frame;
+   t->entry[i].age = time;
 }
 
 /* The next two data structures is the TLB (tlb) and page table (ptable). 
@@ -119,47 +143,47 @@ return;
 void main()
 {
 
-struct ptable * p =createPTable(NUMPAGES);
-struct tlb * t =createTLB(TLBSIZE);
-int tlbHitTotal=0;
-int totalReferences=0;
-/* Open the file which has virtual addresses */ 
-FILE *fp = fopen("address.txt", "r");
-if (fp ==NULL) {
-   printf("Cannot open file\n");
-   exit(1);
-}
-
-/* Read virtual addresses */ 
-int vaddr;  /* virtual address */  
-for (int time=0; ; time++) { /* Read a virtual address */
-   if (fscanf(fp, "%d", &vaddr)!= 1) break;
-
-   totalReferences++;
-   int page = vaddr >> 8; /* Page # of virtual address */
-
-   /* Access TLB */
-   int tlbhit=0;     /* indicates a TLB hit */
-   int frame=accessTLB(t,page,time); /* Frame # of page */
-   if (frame==FAIL) { 
-       frame=accessPTable(p,page);
-       replaceTLB(t,page,frame,time);
-   }
-   else {
-       tlbhit=1;
-       tlbHitTotal++;
+   struct ptable * p =createPTable(NUMPAGES);
+   struct tlb * t =createTLB(TLBSIZE);
+   int tlbHitTotal=0;
+   int totalReferences=0;
+   /* Open the file which has virtual addresses */ 
+   FILE *fp = fopen("address.txt", "r");
+   if (fp ==NULL) {
+      printf("Cannot open file\n");
+      exit(1);
    }
 
-   int paddr = (frame<<8)+ (0xff & vaddr);  /* Physical address */
-   printf("VirtAddr=%6d PhysAddr=%6d PageNum=%4d FrameNum=%3d ",vaddr,paddr,page,frame);  
-   if (tlbhit == 1) printf("TLB-HIT   ");
-   else printf("TLB-MISS  ");
+   /* Read virtual addresses */ 
+   int vaddr;  /* virtual address */  
+   for (int time=0; ; time++) { /* Read a virtual address */
+      if (fscanf(fp, "%d", &vaddr)!= 1) break;
 
-   printf("\n");
-}
-printf("Total References = %d, Total TLB Hits=%d\n",totalReferences,tlbHitTotal);
-fclose(fp);
-return;
+      totalReferences++;
+      int page = vaddr >> 8; /* Page # of virtual address */
+
+      /* Access TLB */
+      int tlbhit=0;     /* indicates a TLB hit */
+      int frame=accessTLB(t,page,time); /* Frame # of page */
+      if (frame==FAIL) { 
+         frame=accessPTable(p,page);
+         replaceTLB(t,page,frame,time);
+      }
+      else {
+         tlbhit=1;
+         tlbHitTotal++;
+      }
+
+      int paddr = (frame<<8)+ (0xff & vaddr);  /* Physical address */
+      printf("VirtAddr=%6d PhysAddr=%6d PageNum=%4d FrameNum=%3d ",vaddr,paddr,page,frame);  
+      if (tlbhit == 1) printf("TLB-HIT   ");
+      else printf("TLB-MISS  ");
+
+      printf("\n");
+   }
+   printf("Total References = %d, Total TLB Hits=%d\n",totalReferences,tlbHitTotal);
+   fclose(fp);
+   return;
 }
 
 
